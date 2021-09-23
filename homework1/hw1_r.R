@@ -118,3 +118,31 @@ grid %>% filter(a==1, b==1)
 is_beta(1, 1, n = 100000)
 
 saveRDS(grid, "homework1/grid.rds")
+
+
+# Q2
+
+## a)
+library(boot)
+require(fitdistrplus)
+data("aircondit")
+
+fit.gamma <- fitdist(aircondit$hours, distr = "gamma", method = "mle")
+summary(fit.gamma)
+
+plot(fit.gamma)
+
+tb.find <- function(alpha, data) {
+  xbar <- mean(data)
+  result <- log(alpha) - log(xbar) - digamma(alpha) + mean(log(data))
+  return(result)
+}
+
+alpha.est.result <- uniroot(tb.find, interval = c(0.001, 4), data = aircondit$hours)
+alpha.est.result
+alpha.est <- alpha.est.result$root
+beta.est <- alpha.est / mean(aircondit$hours)
+c(alpha.est, beta.est)
+# https://www.math.arizona.edu/~jwatkins/O3_mle.pdf
+
+## b)
