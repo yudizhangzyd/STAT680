@@ -1,27 +1,53 @@
+---
+title: "STAT680_HW1"
+author: "Yudi Zhang, Wangqian Ju"
+date: "9/24/2021"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+
 library(tidyverse)
 library(magrittr, include.only = c("%<>%", "%$%"))
+```
 
 # Q1
 
 ## a)
-n <- 1000
+
+We have $g(X) = X^{\alpha - 1}$ and $X \sim \mathrm{Exp}(1)$
+
+```{r}
+n <- 10000
 u <- runif(n)
+
+# obtain the Exp(1) random variable
 ee <- -log(1-u)
 
 alpha <- 1.89
 
-tt <- ee^(alpha - 1)
-var(tt) / n
-
-(mean(ee^(2*alpha-2)) - (mean(tt))^2) / n
-
 e.gamma <- ee^(alpha - 1) %>% mean
-e.gamma
-gamma(alpha)
+
+# check the result using gamma function 
+c(e.gamma, gamma(alpha))
+```
 
 ## b)
 
+$$
+\begin{aligned}
+Var(\frac{1}{n} \sum X_i^{\alpha-1}) &= \frac{1}{n} Var(X^{\alpha - 1}) \\
+          &= \frac{1}{n} (E[X^{2(\alpha-1)}] - [E(X^{\alpha-1})]^2 ) \\
+          &= \frac{1}{n} \left(\Gamma(2\alpha-1) - [\Gamma(\alpha)]^2 \right)
+\end{aligned}
+$$
+
 ## c)
+
+```{r}
 estimate_gamma <- function(alpha, n = 1000) {
   u <- runif(n)
   ee <- -log(1-u)
@@ -29,19 +55,33 @@ estimate_gamma <- function(alpha, n = 1000) {
   tt <- ee^(alpha - 1)
   est <- mean(tt)
   sd <- sqrt(var(tt) / n)
-  sd2 <- sqrt((mean(ee^(2*alpha-2)) - (mean(tt))^2) / n)
 
-  result <- c(est, sd, sd2)
-  names(result) <- c("estimate", "sd", "sd2")
+  result <- c(est, sd)
+  names(result) <- c("estimate", "sd")
   return(result)
 }
+```
 
+For $\alpha = 1.5$, $\Gamma(\alpha) = 0.8862269$. And for different simulation sizes, we have:
+
+```{r, echo=FALSE}
 alpha <- 1.5
-n <- 1000
-estimate_gamma(alpha, n)
-gamma(alpha)
+n.size <- c(10, 100, 1000, 10000)
+tt <- lapply(n.size, function(n) {
+  estimate_gamma(alpha, n)
+})
+tt.df <- do.call(rbind, tt) %>% as.data.frame()
+tt.df$n <- n.size
+
+tt.df %>% select(n, estimate, sd)
+```
+
+
+
 
 ## d)
+
+```{r}
 estimate_gamma_antithetic <- function(alpha, n = 1000) {
   u <- runif(n)
   u2 <- 1 - u
@@ -51,20 +91,28 @@ estimate_gamma_antithetic <- function(alpha, n = 1000) {
   tt <- ee^(alpha - 1)
   est <- mean(tt)
   sd <- sqrt(var(tt) / (2*n))
-  sd2 <- sqrt((mean(ee^(2*alpha-2)) - (mean(tt))^2) / (2*n))
 
-  result <- c(est, sd, sd2)
-  names(result) <- c("estimate", "sd", "sd2")
+  result <- c(est, sd)
+  names(result) <- c("estimate", "sd")
   return(result)
 }
+```
 
+```{r, echo=FALSE}
 alpha <- 1.5
 n <- 10000
-estimate_gamma(alpha, n)
-estimate_gamma_antithetic(alpha, n)
-gamma(alpha)
+ttd.df <- rbind(estimate_gamma(alpha, n), estimate_gamma_antithetic(alpha, n)) %>% as.data.frame()
+ttd.df$type <- c("MC", "Antithetic")
+```
+
+We can see that the method of antithetic variates can reduce the standard error. 
+
+```{r}
+ttd.df
+```
 
 ## e)
+```{r}
 tr_val <- 1 - exp(-1)
 n <- 100000
 
@@ -99,30 +147,38 @@ is_beta <- function(a=2, b=2, n=1000) {
   return(result)
 }
 
-grid <- expand.grid(a=seq(0.2,5,by=.2), b=seq(0.2,5,by=.2))
+grid <- readRDS("grid.rds")
 
-grid %<>% as_tibble %>% mutate(
-  is_beta_result = purrr::map2(a, b, function(aa, bb) {
-    rr <- is_beta(aa, bb, n = 100000) %>% t %>% as_tibble
-    colnames(rr) <- c("estimate", "sd")
-    rr
-  })
-) %>% unnest(is_beta_result) %>%
-  mutate(
-    diff = abs(tr_val - estimate)
-  )
+grid
+# grid <- expand.grid(a=seq(0.2,5,by=.2), b=seq(0.2,5,by=.2))
+# 
+# grid %<>% as_tibble %>% mutate(
+#   is_beta_result = purrr::map2(a, b, function(aa, bb) {
+#     rr <- is_beta(aa, bb, n = 100000) %>% t %>% as_tibble
+#     colnames(rr) <- c("estimate", "sd")
+#     rr
+#   })
+# ) %>% unnest(is_beta_result) %>%
+#   mutate(
+#     diff = abs(tr_val - estimate)
+#   )
+# 
+# grid$sd %>% which.min() %>% {grid[.,]}
+# grid$diff %>% which.min() %>% {grid[.,]}
+# grid %>% filter(a==1, b==1)
+# is_beta(1, 1, n = 100000)
+# 
+# saveRDS(grid, "homework1/grid.rds")
+```
 
-grid$sd %>% which.min() %>% {grid[.,]}
-grid$diff %>% which.min() %>% {grid[.,]}
-grid %>% filter(a==1, b==1)
-is_beta(1, 1, n = 100000)
 
-saveRDS(grid, "homework1/grid.rds")
 
 
 # Q2
 
 ## a)
+
+```{r}
 library(boot)
 require(fitdistrplus)
 data("aircondit")
@@ -160,6 +216,7 @@ bias.alpha <- - mean(eiv)
 # var(jk.est) * (n-1)^2 / n
 
 (sum(eiv^2) - n * bias.alpha^2) / (n * (n-1))
+```
 
 
 
