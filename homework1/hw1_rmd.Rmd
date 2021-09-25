@@ -218,5 +218,308 @@ bias.alpha <- - mean(eiv)
 (sum(eiv^2) - n * bias.alpha^2) / (n * (n-1))
 ```
 
+# Q3.
+## (d) infinitesimal jackknife, regular jackknife and non-parametric bootstrap
+
+### i.
+```{r}
+corr = cor(cd4$baseline, cd4$oneyear)
+infjack_var <- function(x, y) {
+  mux = mean(x)
+  muy = mean(y)
+  sx = sd(x)
+  sy = sd(y)
+  zx = (x - mux)/sx
+  zy = (y - muy)/sy
+  
+  ifunc = zx * zy - 1/2 * cor(x, y) * (zx^2 + zy^2)
+  return(sum(ifunc^2) * 1/(length(ifunc)^2))
+}
+infjack_var(cd4$baseline, cd4$oneyear)
+```
+
+### ii.
+```{r}
+jackknife <- function(x, y) {
+  est = c()
+  for (i in 1:length(x)) {
+    est = c(est, cor(x[-i], y[-i]))
+  }
+  corr = cor(x, y)
+  bias = (length(x)  - 1) * (mean(est) - corr)
+  n = length(x) 
+  tmp = (n - 1) *(corr - est)
+  variance = (sum(tmp^2) - n * bias^2)/((n  - 1) * n)
+  return(c(bias, variance))
+}
+jackknife(cd4$baseline, cd4$oneyear)
+```
+
+### iii.
+```{r}
+boot <- function(x, y, b = 50) {
+  n = length(x)
+  est = c()
+  for(i in 1:b) {
+    s = sample(c(1:n), n, replace = TRUE)  
+    est = c(est, cor(x[s], y[s]))
+  }
+  corr = cor(x, y)
+  bias = mean(est) - corr
+  variance = var(est - corr)
+  return(c(bias, variance))
+}
+boot(cd4$baseline, cd4$oneyear)
+```
+
+## (e).
+### percentile interval
+```{r}
+bootci <- function(x, y, b = 1000) {
+  n = length(x)
+  est = c()
+  for(i in 1:b) {
+    s = sample(c(1:n), n, replace = TRUE)  
+    est = c(est, cor(x[s], y[s]))
+  }
+  return(quantile(est, probs = c(0.025, 0.975)))
+}
+bootci(cd4$baseline, cd4$oneyear)
+```
+### normal approximation
+```{r}
+bootci_norm <- function(x, y) {
+  n = length(x)
+  corr = cor(x, y)
+  l = (1 + corr -(1- corr) * exp(2*1.96/sqrt(n-3)))/(1 + corr +(1- corr)*exp(2*1.96/sqrt(n-3)))
+  r = (1 + corr -(1- corr) * exp(-2*1.96/sqrt(n-3)))/(1 + corr +(1- corr)*exp(-2*1.96/sqrt(n-3)))
+  return(c(l, r))
+}
+
+bootci_norm(cd4$baseline, cd4$oneyear)
+```
+### invariance to transformation
+```{r}
+fishertans <- function(x, y) {
+  n = length(x)
+  corr = cor(x, y)
+  
+  z = 0.5 * log((1 + corr)/(1-corr))
+  sd = sqrt(1/(n-3))
+  l = z + qnorm(0.975) * sd
+  r = z - qnorm(0.975) * sd
+  up = (exp(2 * l) - 1)/(exp(2*l) + 1)
+  lo = (exp(2 * r) - 1)/(exp(2*r) + 1)
+  return(c(lo, up))
+}
+fishertans(cd4$baseline, cd4$oneyear)
+```
+
+## Q4. (b).
+###  CI Interval example:
+bootstrap normal: 0.62 2.78
+
+bootstrap basic:  0.29 1.82
+
+bootstrap studentized: 1.37 3.41
+
+<br>
+
+## Based on 1600 independent data sets:
+### Coverage:
+bootstrap normal: 0.99875
+
+bootstrap basic: 0.935625
+
+bootstrap studentized: 0.94375
+
+### Mean and sd of length:
+bootstrap normal: 2.3482 +/- 0.977
+
+bootstrap basic: 2.51 +/- 0.71
+
+bootstrap studentized: 2.61 +/- 1.3
+
+The studentized bootstrap method was closest to 95% and bootstrap normal tends to give far large interval.
+
+<br>
+
+## Below is the implementation
+### 1. normal
+```{r, eval=FALSE}
+normalci <- function(n = 15, theta = 2, r = 999, a = 0.025) {
+  obs = rexp(n, theta)
+  xbar = rep(0, r)
+  for(i in 1:r) { 
+    x=sample(obs, n, replace=T) 
+    xbar[i] = 1/mean(x) 
+  }
+  deltastar = xbar - theta
+  d = quantile(deltastar, c(a,1-a))
+  ci = mean(xbar) - c(d[2], d[1])
+  return(ci)
+}
+normalci()
+```
+
+```{r, eval=FALSE}
+n = 15
+theta = 2
+r = 999
+a = 0.025
+sims <- 1600
+results <- as.numeric(sims)
+len = rep(0, sims)
+for (l in 1:1600) {
+  pop <- rexp(100, theta)
+  mu <- 1/mean(pop) 
+  obs = sample(pop, n)
+  xbar = rep(0, r)
+  for(i in 1:r) { 
+    x=sample(obs, n, replace=T) 
+    xbar[i] = 1/mean(x) 
+  }
+  deltastar = xbar - theta
+  d = quantile(deltastar, c(a,1-a))
+  ci = mean(xbar) - c(d[2], d[1])
+  len[l] = ci[2] - ci[1]
+  results[l] <- ci[1] < mu & ci[2] > mu
+}
+sum(results)/sims
+```
+
+### 2. basic
+```{r, eval=FALSE}
+basicci <- function(n = 15, theta = 2, r = 999, a = 0.025) {
+  obs = rexp(n, theta)
+  est = 1/mean(obs) 
+  xbar = rep(0, r)
+  for(i in 1:r) { 
+    x = rexp(n, est)
+    xbar[i] = 1/mean(x) 
+  }
+  xbar = sort(xbar)
+  l = (r + 1) * (1 - a)
+  u = (r + 1) * (a)
+  return(c(2*est - xbar[l], 2*est - xbar[u]))
+}
+basicci()
+```
+
+```{r, eval=FALSE}
+results <- 0
+lens = rep(0, sims)
+for (j in 1:1600) {
+  pop <- rexp(100, theta)
+  mu <- 1/mean(pop) 
+  obs = sample(pop, n)
+  est = 1/mean(obs) 
+  xbar = rep(0, r)
+  for(i in 1:r) { 
+    x = rexp(n, est)
+    xbar[i] = 1/mean(x) 
+  }
+  xbar = sort(xbar)
+  l = (r + 1) * (1 - a)
+  u = (r + 1) * (a)
+  ci = c(2*est - xbar[l], 2*est - xbar[u])
+  lens[j] =  xbar[l] -  xbar[u]
+  if(ci[1] < mu & ci[2] > mu)
+    results = results + 1
+}
+results/sims
+```
+
+### 3. studentized (found 2 ways to implement this)
+
+
+```{r, eval=FALSE}
+stuci <- function(n = 15, theta = 2, r = 999, a = 0.025, M = 50) {
+  obs = rexp(n, theta)
+  est = 1/mean(obs) 
+  zr = rep(0, r)
+  xbar = rep(0, r)
+  for(i in 1:r) { 
+    x=sample(obs, n, replace=T) 
+    xbar[i] = 1/mean(x)
+    thetahat = rep(0, M)
+    for (j in 1:M) {
+      sx=sample(x, n, replace=T) 
+      thetahat[j] = 1/mean(sx)
+    }
+    vr = sd(thetahat)
+    zr[i] = (xbar[i] - est)/vr
+  }
+  v = sd(xbar)
+  zr = sort(zr)
+  d = quantile(zr, c(a,1-a))
+  ci = est - c(d[2], d[1])
+  return(ci)
+}
+stuci()
+```
+
+```{r, eval=FALSE}
+
+M = 10
+results <- 0
+for (l in 1:1600) {
+  pop <- rexp(100, theta)
+  mu <- 1/mean(pop) 
+  obs = sample(pop, n)
+  est = 1/mean(obs) 
+  zr = rep(0, r)
+  xbar = rep(0, r)
+  for(i in 1:r) { 
+    x=sample(obs, n, replace=T) 
+    xbar[i] = 1/mean(x)
+    thetahat = rep(0, M)
+    for (j in 1:M) {
+      sx=sample(x, n, replace=T) 
+      thetahat[j] = 1/mean(sx)
+    }
+    vr = sd(thetahat)
+    zr[i] = (xbar[i] - est)/vr
+  }
+  v = sd(xbar)
+  zr = sort(zr)
+  d = quantile(zr, c(a,1-a))
+  ci = est - c(d[2], d[1])
+  if(ci[1] < mu & ci[2] > mu)
+    results = results + 1
+}
+sum(results)/sims
+```
+
+
+```{r, eval=FALSE}
+## or use (another implementation)
+pop <- rexp(1000, rate = 1/theta)  
+x <- sample(pop, n)
+mu <- mean(pop)  
+B <- 1000
+samples <- matrix(sample(x, size = n * B, replace = T), nrow = n, ncol = B)
+est <- (apply(samples, 2, mean) - mean(x))/(apply(samples, 2, sd)/sqrt(n))
+mean(x) - quantile(est, probs = c(1-a, a)) * sd(x)/sqrt(n)
+```
+
+```{r, eval=FALSE}
+
+ci <- matrix(FALSE, sims, 2)
+results <- as.numeric(sims)
+lens = rep(0, sims)
+for (i in 1:sims) {
+    pop <- rexp(1000, rate = 1/theta)  
+    x <- sample(pop, n)
+    mu <- mean(pop)  
+    B <- 1000
+    samples <- matrix(sample(x, size = n * B, replace = T), nrow = n, ncol = B)
+    est <- (apply(samples, 2, mean) - mean(x))/(apply(samples, 2, sd)/sqrt(n))
+    ci[i, ] <- mean(x) - quantile(est, probs = c(1-a, a)) * sd(x)/sqrt(n)
+    lens[i] = ci[i, 2] - ci[i, 1]
+    results[i] <- ci[i, 1] < mu & ci[i, 2] > mu
+}
+sum(results)/sims
+```
 
 
