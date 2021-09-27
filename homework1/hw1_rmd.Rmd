@@ -112,31 +112,43 @@ ttd.df
 ```
 
 ## e)
+
 ```{r}
 tr_val <- 1 - exp(-1)
 n <- 100000
+```
 
 ### i)
+
+```{r}
 u <- runif(n)
 tt <- as.numeric(u < exp(-(1:n) / n))
-mean(tt)
-sqrt(var(tt) / n)
+c(mean(tt), sqrt(var(tt) / n))
+```
 
 ### ii)
+
+```{r}
 u <- runif(n)
 tt <- exp(-u)
-mean(tt)
-sqrt(var(tt) / n)
+c(mean(tt), sqrt(var(tt) / n))
+```
 
 ### iii)
+
+```{r}
 u <- runif(n)
 u2 <- 1 - u
 u <- c(u, u2)
 tt <- exp(-u)
-mean(tt)
-sqrt(var(tt) / (2*n))
+c(mean(tt), sqrt(var(tt) / (2*n)))
+```
 
 ### iv)
+
+We performed a grid search on $(0, 5) \times (0,5)$, and found that $\alpha = 0.8$ and $\beta = 1.2$ gives the smallest standard error.
+
+```{r}
 is_beta <- function(a=2, b=2, n=1000) {
   bb <- rbeta(n, a, b)
   tt <- exp(-bb) / dbeta(bb, a, b)
@@ -148,8 +160,7 @@ is_beta <- function(a=2, b=2, n=1000) {
 }
 
 grid <- readRDS("grid.rds")
-
-grid
+grid$sd %>% which.min() %>% {grid[.,]}
 # grid <- expand.grid(a=seq(0.2,5,by=.2), b=seq(0.2,5,by=.2))
 # 
 # grid %<>% as_tibble %>% mutate(
@@ -171,6 +182,36 @@ grid
 # saveRDS(grid, "homework1/grid.rds")
 ```
 
+We can can see that from $i$ to $iv$, the variability of methods decreases in terms of the standard errors. And the comparison of the time is shown below:
+
+```{r, echo=FALSE}
+library(rbenchmark)
+
+benchmark(
+  "hit-or-miss" = {
+    u <- runif(n)
+    tt <- as.numeric(u < exp(-(1:n) / n))
+    c(mean(tt), sqrt(var(tt) / n))
+  },
+  "basic MC" = {
+    u <- runif(n)
+    tt <- exp(-u)
+    c(mean(tt), sqrt(var(tt) / n))
+  },
+  "antithetic" = {
+    u <- runif(n)
+    u2 <- 1 - u
+    u <- c(u, u2)
+    tt <- exp(-u)
+    c(mean(tt), sqrt(var(tt) / (2*n)))
+  },
+  "importance sampling" = {
+    is_beta(0.8, 1.2, n)
+  },
+  replications = 10, order = "relative", 
+  columns = c('test', 'replications', 'elapsed', 'relative')
+)
+```
 
 
 
@@ -178,15 +219,12 @@ grid
 
 ## a)
 
+The maximum likelihood estimator of the shape parameter is:
+
 ```{r}
 library(boot)
 require(fitdistrplus)
 data("aircondit")
-
-fit.gamma <- fitdist(aircondit$hours, distr = "gamma", method = "mle")
-summary(fit.gamma)
-
-plot(fit.gamma)
 
 tb.find <- function(alpha, data) {
   xbar <- mean(data)
@@ -195,13 +233,16 @@ tb.find <- function(alpha, data) {
 }
 
 alpha.est.result <- uniroot(tb.find, interval = c(0.001, 4), data = aircondit$hours)
-alpha.est.result
 alpha.est <- alpha.est.result$root
-beta.est <- alpha.est / mean(aircondit$hours)
-c(alpha.est, beta.est)
-# https://www.math.arizona.edu/~jwatkins/O3_mle.pdf
+alpha.est
+```
+
 
 ## b)
+
+The bias and variance of the shape parameter estimator obtained by the jackknife is:
+
+```{r}
 jk.est <- sapply(seq_along(aircondit$hours), function(i) {
   data <- aircondit$hours
   data.tmp <- data[-i]
@@ -211,11 +252,13 @@ jk.est <- sapply(seq_along(aircondit$hours), function(i) {
 })
 n <- length(aircondit$hours)
 eiv <- (n-1) * (alpha.est - jk.est)
+
 bias.alpha <- - mean(eiv)
+var.alpha <- (sum(eiv^2) - n * bias.alpha^2) / (n * (n-1))
 
-# var(jk.est) * (n-1)^2 / n
-
-(sum(eiv^2) - n * bias.alpha^2) / (n * (n-1))
+result <- c(bias.alpha, var.alpha)
+names(result) <- c("bias", "variance")
+result
 ```
 
 # Q3.
