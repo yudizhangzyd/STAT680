@@ -199,7 +199,7 @@ find_neighbor <- function(z, i, j) {
 
 }
 
-find_neighbor(z, 49, 49)
+find_neighbor(z, 50, 49)
 
 compute_log_cond_prob <- function(z, i, j, alpha = 0, beta = 0) {
   xi <- z[i,j]
