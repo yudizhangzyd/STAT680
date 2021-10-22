@@ -165,14 +165,15 @@ compute_neg_log_prof_llh.neighbor <- function(par, z.neighbor, alpha_zero = FALS
     alpha <- par[1]
     beta <- par[2]
   } else {
-    if(alpha_zero) {
+    if(alpha_zero & !beta_zero) {
       alpha <- 0
       beta <- par
-    } else if (beta_zero) {
+    } else if (beta_zero & !alpha_zero) {
       alpha <- par
       beta <- 0
     } else{
-      stop("both parameters are 0")
+      alpha <- 0
+      beta <- 0
     }
   }
 
@@ -191,6 +192,85 @@ compute_neg_log_prof_llh.neighbor <- function(par, z.neighbor, alpha_zero = FALS
   return(result)
 }
 
+compute_MPLE_ratio <- function(dat.neighbor, q) {
+
+  opt.full <- optim(par = c(0.5, 0.5), compute_neg_log_prof_llh.neighbor,
+                    z.neighbor = dat.neighbor,
+                    method = "L-BFGS-B", lower = c(0.0001, 0.0001))
+
+  if(q == 0){
+    null.par <- 0
+    null.val <- -sum(dat.neighbor$count) * log(0.5)
+  } else if (q == 1) {
+    opt.null <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                 z.neighbor = dat.neighbor, beta_zero = TRUE,
+                 method = "L-BFGS-B", lower = 0.0001)
+    null.par <- opt.null$par
+    null.val <- opt.null$value
+  } else {
+    opt.null <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                 z.neighbor = dat.neighbor, alpha_zero = TRUE,
+                 method = "L-BFGS-B", lower = 0.0001)
+    null.par <- opt.null$par
+    null.val <- opt.null$value
+  }
+
+  return(list(full.par = opt.full$par, full.val = opt.full$value,
+              null.par = null.par, null.val = null.val))
+}
+
+fun2 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor) {
+
+  dat.original <- LSBs[[id]]$lsb[, , layer]
+  dat.original.neighbor <- FUN(dat.original)
+
+  result <- list()
+  result[[1]] <- compute_MPLE_ratio(dat.original.neighbor, q)
+
+
+  if(q == 0) {
+    for(b in 1:B) {
+      smp = matrix(rbinom(nrow(dat.original)*ncol(dat.original), 1, 0.5), nrow = nrow(dat.original))
+      dat.neighbor <- FUN(smp)
+
+      result[[b+1]] <- compute_MPLE_ratio(dat.neighbor, q)
+    }
+
+  } else if (q == 1) {
+    opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                   z.neighbor = dat.original.neighbor, beta_zero = TRUE,
+                   method = "L-BFGS-B", lower = 0.0001)
+    p = exp(opt.r$par)/(1 + exp(opt.r$par))
+    for(b in 1:B) {
+      smp = matrix(rbinom(nrow(dat.original)*ncol(dat.original), 1, p), nrow = nrow(dat.original))
+      dat.neighbor <- FUN(smp)
+
+      result[[b+1]] <- compute_MPLE_ratio(dat.neighbor, q)
+    }
+  } else {
+    n <- nrow(dat.original)
+    m <- ncol(dat.original)
+    opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                   z.neighbor = dat.original.neighbor, alpha_zero = TRUE,
+                   method = "L-BFGS-B", lower = 0.0001)
+    beta <- opt.r$par
+    mask <- matrix(1,n,m)
+    neigh <- getNeighbors(mask, c(2,2,0,0))
+    block <- getBlocks(mask, 2)
+    k <- 2
+    for(b in 1:B){
+      result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
+      z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
+      smp = z - 1
+      dat.neighbor <- FUN(smp)
+
+      result[[b+1]] <- compute_MPLE_ratio(dat.neighbor, q)
+    }
+  }
+
+  return(result)
+}
+
 fun <- function(LSBs, B = 50, id, q = 0, FUN = count_neighbor) {
   res = c()
   res2 = c()
@@ -201,6 +281,11 @@ fun <- function(LSBs, B = 50, id, q = 0, FUN = count_neighbor) {
     for(i in 1:3) {
       dat = LSBs[[id]]$lsb[, , i]
       dat.neighbor <- FUN(dat)
+      opt <- optim(par = c(0.5, 0.5), compute_neg_log_prof_llh.neighbor,
+                   z.neighbor = dat.neighbor,
+                   method = "L-BFGS-B", lower = c(0.0001, 0.0001))
+      par = c(par, opt$par)
+      val = c(val, opt$value)
       if(q == 0) {
         smp = matrix(rbinom(nrow(dat)*ncol(dat), 1, 0.5), nrow = nrow(dat))
         dat.neighbor <- FUN(smp)
@@ -250,6 +335,13 @@ system.time({
 })
 
 system.time({
+  res2 = lapply(1:3, function(layer) {
+    fun2(B = 1, id = 7, q = 1, layer = layer, LSBs = LSBs, FUN = count_neighbor_mc)
+  })
+})
+
+
+system.time({
   res = fun(B = 1, id = 7, q = 1, LSBs = LSBs)
 })
 
@@ -274,7 +366,11 @@ res = fun(B = 1, id = 7, q = 2, LSBs = LSBs)
 # compute_neg_log_prof_llh.neighbor(par, z.neighbor)
 
 # # run on the data
-# dat = LSBs[[7]]$lsb[, , 1]
+dat = LSBs[[7]]$lsb[, , 1]
+dat.neighbor <- count_neighbor_mc(dat)
+opt.r.beta <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor, z.neighbor = dat.neighbor,
+                    alpha_zero = TRUE, beta_zero = TRUE,
+                    method = "L-BFGS-B", lower = c(0.0001, 0.0001))
 
 # system.time({
 #   opt.r.beta <- optim(par = c(0.5), compute_neg_log_prof_llh, z = dat, alpha_zero = TRUE,
@@ -315,12 +411,12 @@ rbenchmark::benchmark(
 # opt.rs <- optim(par = c(0, 0), compute_neg_log_prof_llh, z = smp, method = "L-BFGS-B")
 
 
-# n <- nrow(dat)
-# beta <- 1
-#
-# mask <- matrix(1,n,n)
-# neigh <- getNeighbors(mask, c(2,2,0,0)) # the neighborhood structure# 1st order neighborhood in 2D
-# block <- getBlocks(mask, 2)
-# k <- 2 #(number of classes, k=2 makes Potts’ to be an Ising model)
-# system.time(result <- swNoData(beta = beta,k = k,neigh = neigh, block = block))
-# z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
+n <- nrow(dat)
+beta <- 1
+
+mask <- matrix(1,n,n)
+neigh <- getNeighbors(mask, c(2,2,0,0)) # the neighborhood structure# 1st order neighborhood in 2D
+block <- getBlocks(mask, 2)
+k <- 2 #(number of classes, k=2 makes Potts’ to be an Ising model)
+system.time(result <- swNoData(beta = beta,k = k,neigh = neigh, block = block))
+z2 <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
