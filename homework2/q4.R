@@ -1,5 +1,5 @@
 library(tidyverse)
-
+library(parallel)
 library(bayesImageS)
 lsb = load("../STAT680/local/LSB.rda")
 # lsb = load("./LSB.rda")
@@ -126,7 +126,6 @@ count_neighbor <- function(z) {
   return(result)
 }
 
-library(parallel)
 
 count_neighbor_mc <- function(z, cores = 6) {
   grid <- expand.grid(i = 1:dim(z)[1], j = 1:dim(z)[2])
@@ -191,8 +190,8 @@ compute_neg_log_prof_llh.neighbor <- function(par, z.neighbor, alpha_zero = FALS
 
   return(result)
 }
-    
-fun <- function(B = 50, id, q = 0, LSBs) {
+
+fun <- function(LSBs, B = 50, id, q = 0, FUN = count_neighbor) {
   res = c()
   res2 = c()
   # foreach (b=1:B) %dopar% {
@@ -201,10 +200,10 @@ fun <- function(B = 50, id, q = 0, LSBs) {
     val = c()
     for(i in 1:3) {
       dat = LSBs[[id]]$lsb[, , i]
-      dat.neighbor <- count_neighbor(dat)
+      dat.neighbor <- FUN(dat)
       if(q == 0) {
-        smp = matrix(rbinom(nrow(dat)^2, 1, 0.5), nrow = nrow(dat))
-        dat.neighbor <- count_neighbor(smp)
+        smp = matrix(rbinom(nrow(dat)*ncol(dat), 1, 0.5), nrow = nrow(dat))
+        dat.neighbor <- FUN(smp)
         opt <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
                      z.neighbor = dat.neighbor, alpha_zero = TRUE,
                      method = "L-BFGS-B", lower = 0.0001)
@@ -213,25 +212,26 @@ fun <- function(B = 50, id, q = 0, LSBs) {
                        z.neighbor = dat.neighbor, beta_zero = TRUE,
                        method = "L-BFGS-B", lower = 0.0001)
         p = exp(opt.r$par)/(1 + exp(opt.r$par))
-        smp = matrix(rbinom(nrow(dat)^2, 1, p), nrow = nrow(dat))
-        dat.neighbor <- count_neighbor(smp)
+        smp = matrix(rbinom(nrow(dat)*ncol(dat), 1, p), nrow = nrow(dat))
+        dat.neighbor <- FUN(smp)
         opt <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
                      z.neighbor = dat.neighbor, beta_zero = TRUE,
                      method = "L-BFGS-B", lower = 0.0001)
       } else {
         n <- nrow(dat)
+        m <- ncol(dat)
         opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
                        z.neighbor = dat.neighbor, alpha_zero = TRUE,
                        method = "L-BFGS-B", lower = 0.0001)
         beta <- opt.r$par
-        mask <- matrix(1,n,n) 
+        mask <- matrix(1,n,m)
         neigh <- getNeighbors(mask, c(2,2,0,0))
         block <- getBlocks(mask, 2)
         k <- 2
         result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
         z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
         smp = z - 1
-        dat.neighbor <- count_neighbor(smp)
+        dat.neighbor <- FUN(smp)
         opt <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
                      z.neighbor = dat.neighbor, alpha_zero = TRUE,
                      method = "L-BFGS-B", lower = 0.0001)
@@ -245,8 +245,15 @@ fun <- function(B = 50, id, q = 0, LSBs) {
   return(list(res, res2))
 }
 ### When beta = 0
-res = fun(B = 1, id = 2, q = 1, LSBs = LSBs)
-### When alpha = 0    
+system.time({
+  res = fun(B = 1, id = 2, q = 1, LSBs = LSBs, count_neighbor = count_neighbor_mc)
+})
+
+system.time({
+  res = fun(B = 1, id = 2, q = 1, LSBs = LSBs)
+})
+
+### When alpha = 0
 res = fun(B = 1, id = 7, q = 2, LSBs = LSBs)
 #### code for testing
 # n <- 50
