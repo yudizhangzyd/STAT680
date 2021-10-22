@@ -246,11 +246,11 @@ fun <- function(LSBs, B = 50, id, q = 0, FUN = count_neighbor) {
 }
 ### When beta = 0
 system.time({
-  res = fun(B = 1, id = 2, q = 1, LSBs = LSBs, count_neighbor = count_neighbor_mc)
+  res = fun(B = 1, id = 7, q = 1, LSBs = LSBs, FUN = count_neighbor_mc)
 })
 
 system.time({
-  res = fun(B = 1, id = 2, q = 1, LSBs = LSBs)
+  res = fun(B = 1, id = 7, q = 1, LSBs = LSBs)
 })
 
 ### When alpha = 0
