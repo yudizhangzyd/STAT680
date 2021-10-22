@@ -191,47 +191,103 @@ compute_neg_log_prof_llh.neighbor <- function(par, z.neighbor, alpha_zero = FALS
 
   return(result)
 }
-
+    
+fun <- function(B = 50, id, q = 0, LSBs) {
+  res = c()
+  res2 = c()
+  # foreach (b=1:B) %dopar% {
+  for(b in 1:B) {
+    par = c()
+    val = c()
+    for(i in 1:3) {
+      dat = LSBs[[id]]$lsb[, , i]
+      dat.neighbor <- count_neighbor(dat)
+      if(q == 0) {
+        smp = matrix(rbinom(nrow(dat)^2, 1, 0.5), nrow = nrow(dat))
+        dat.neighbor <- count_neighbor(smp)
+        opt <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                     z.neighbor = dat.neighbor, alpha_zero = TRUE,
+                     method = "L-BFGS-B", lower = 0.0001)
+      } else if (q == 1) {
+        opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                       z.neighbor = dat.neighbor, beta_zero = TRUE,
+                       method = "L-BFGS-B", lower = 0.0001)
+        p = exp(opt.r$par)/(1 + exp(opt.r$par))
+        smp = matrix(rbinom(nrow(dat)^2, 1, p), nrow = nrow(dat))
+        dat.neighbor <- count_neighbor(smp)
+        opt <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                     z.neighbor = dat.neighbor, beta_zero = TRUE,
+                     method = "L-BFGS-B", lower = 0.0001)
+      } else {
+        n <- nrow(dat)
+        opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                       z.neighbor = dat.neighbor, alpha_zero = TRUE,
+                       method = "L-BFGS-B", lower = 0.0001)
+        beta <- opt.r$par
+        mask <- matrix(1,n,n) 
+        neigh <- getNeighbors(mask, c(2,2,0,0))
+        block <- getBlocks(mask, 2)
+        k <- 2
+        result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
+        z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
+        smp = z - 1
+        dat.neighbor <- count_neighbor(smp)
+        opt <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                     z.neighbor = dat.neighbor, alpha_zero = TRUE,
+                     method = "L-BFGS-B", lower = 0.0001)
+      }
+      par = c(par, opt$par)
+      val = c(val, opt$value)
+    }
+   res = rbind(res, par)
+   res2 = rbind(res2, val)
+  }
+  return(list(res, res2))
+}
+### When beta = 0
+res = fun(B = 1, id = 2, q = 1, LSBs = LSBs)
+### When alpha = 0    
+res = fun(B = 1, id = 7, q = 2, LSBs = LSBs)
 #### code for testing
-n <- 50
-beta <- 1
-mask <- matrix(1,n,n) # basically the grid
-neigh <- getNeighbors(mask, c(2,2,0,0)) # the neighborhood structure
-# 1st order neighborhood in 2D
-block <- getBlocks(mask, 2)
-k <- 2 #(number of classes, k=2 makes Potts’ to be an Ising model)
-result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
-z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
-z <- z - 1
+# n <- 50
+# beta <- 1
+# mask <- matrix(1,n,n) # basically the grid
+# neigh <- getNeighbors(mask, c(2,2,0,0)) # the neighborhood structure
+# # 1st order neighborhood in 2D
+# block <- getBlocks(mask, 2)
+# k <- 2 #(number of classes, k=2 makes Potts’ to be an Ising model)
+# result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
+# z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
+# z <- z - 1
 
-z.neighbor <- count_neighbor(z)
-par <- c(0.5, 1.5)
+# z.neighbor <- count_neighbor(z)
+# par <- c(0.5, 1.5)
 
-compute_neg_log_prof_llh(par, z)
-compute_neg_log_prof_llh.neighbor(par, z.neighbor)
+# compute_neg_log_prof_llh(par, z)
+# compute_neg_log_prof_llh.neighbor(par, z.neighbor)
 
-# run on the data
-dat = LSBs[[7]]$lsb[, , 1]
+# # run on the data
+# dat = LSBs[[7]]$lsb[, , 1]
 
-system.time({
-  opt.r.beta <- optim(par = c(0.5), compute_neg_log_prof_llh, z = dat, alpha_zero = TRUE,
-                      method = "L-BFGS-B")
-})
-# user  system elapsed
-# 252.109   1.147 254.841
-opt.r.beta$par
-opt.r.beta$value
+# system.time({
+#   opt.r.beta <- optim(par = c(0.5), compute_neg_log_prof_llh, z = dat, alpha_zero = TRUE,
+#                       method = "L-BFGS-B")
+# })
+# # user  system elapsed
+# # 252.109   1.147 254.841
+# opt.r.beta$par
+# opt.r.beta$value
 
-system.time({
-  dat.neighbor <- count_neighbor(dat)
-  opt.r.beta.neighbor <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
-                               z.neighbor = dat.neighbor, alpha_zero = TRUE,
-                               method = "L-BFGS-B")
-})
+# system.time({
+#   dat.neighbor <- count_neighbor(dat)
+#   opt.r.beta.neighbor <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+#                                z.neighbor = dat.neighbor, alpha_zero = TRUE,
+#                                method = "L-BFGS-B")
+# })
 # user  system elapsed
 # 15.058   0.065  15.133
-opt.r.beta.neighbor$par
-opt.r.beta.neighbor$value
+# opt.r.beta.neighbor$par
+# opt.r.beta.neighbor$value
 
 # alpha.hat <- opt.r.alpha$par
 # p <- exp(alpha.hat) / (exp(alpha.hat) + 1)
