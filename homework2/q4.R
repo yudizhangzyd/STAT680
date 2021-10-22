@@ -126,6 +126,41 @@ count_neighbor <- function(z) {
   return(result)
 }
 
+library(parallel)
+
+count_neighbor_mc <- function(z, cores = 6) {
+  grid <- expand.grid(i = 1:dim(z)[1], j = 1:dim(z)[2])
+  # grid$xi <- NA
+  # grid$beta_coef <- NA
+  # grid$type <- NA
+  grid.list <- mclapply(1:nrow(grid), function(k) {
+    i <- grid$i[k]
+    j <- grid$j[k]
+
+    xi <- z[i,j]
+    xi_neighbor <- sapply(find_neighbor(z, i, j), function(nn) { z[nn[1], nn[2]] })
+
+    beta_coef <- sum(xi == xi_neighbor)
+
+    type <- length(xi_neighbor)
+
+    c(xi, beta_coef, type)
+
+  }, mc.cores = cores)
+
+  grid <- do.call(rbind, grid.list)
+  colnames(grid) <- c("xi", "beta_coef", "type")
+  grid <- as_tibble(grid)
+
+  result <- grid %>% group_by(xi, beta_coef, type) %>%
+    summarise(
+      count = n(),
+      .groups = "drop"
+    )
+
+  return(result)
+}
+
 compute_neg_log_prof_llh.neighbor <- function(par, z.neighbor, alpha_zero = FALSE, beta_zero = FALSE) {
   if(length(par) == 2){
     alpha <- par[1]
@@ -201,7 +236,16 @@ opt.r.beta.neighbor$value
 # alpha.hat <- opt.r.alpha$par
 # p <- exp(alpha.hat) / (exp(alpha.hat) + 1)
 
-
+rbenchmark::benchmark(
+  neighbor1 = {
+    dat.neighbor1 <- count_neighbor(dat)
+  },
+  neighbor2 = {
+    dat.neighbor2 <- count_neighbor_mc(dat, cores = 6)
+  },
+  replications = 1,
+  columns = c("test", "replications", "elapsed", "relative")
+)
 
 # sample from binary
 # smp = matrix(rbinom(nrow(dat)^2, 1, 0.5), nrow = nrow(dat))
