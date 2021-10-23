@@ -1,8 +1,5 @@
 args = commandArgs(trailingOnly=TRUE)
 
-
-lsb = load("data/LSB.rda")
-
 source("parallel_setup.R")
 
 fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6) {
@@ -77,13 +74,15 @@ if (length(args) == 0) {
   q <- 0
   B <- 2
 } else if (length(args) == 4) {
-  id <- args[1]
-  layer <- args[2]
-  q <- args[3]
-  B <- args[4]
+  id <- as.numeric(args[1])
+  layer <- as.numeric(args[2])
+  q <- as.numeric(args[3])
+  B <- as.numeric(args[4])
 } else {
   stop("please provide 0 or 4 arguments: id, layer, q, B")
 }
+
+lsb = load("data/LSB.rda")
 
 system.time({
   ress <- fun3(LSBs, id = id, layer = layer, B = B, q = q, FUN = count_neighbor_dl)
