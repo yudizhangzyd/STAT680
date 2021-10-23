@@ -189,3 +189,60 @@ compute_MPLE_ratio <- function(dat.neighbor, q) {
               null.par = null.par, null.val = null.val))
 }
 
+
+fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor) {
+
+  dat.original <- LSBs[[id]]$lsb[, , layer]
+  dat.original.neighbor <- FUN(dat.original)
+
+  result <- list()
+  result[[1]] <- compute_MPLE_ratio(dat.original.neighbor, q)
+
+  if(q == 0) {
+    tmp <- foreach(b=1:B) %dopar% {
+      source("homework2/parallel_setup.R")
+      smp = matrix(rbinom(nrow(dat.original)*ncol(dat.original), 1, 0.5), nrow = nrow(dat.original))
+      dat.neighbor <- FUN(smp)
+
+      compute_MPLE_ratio(dat.neighbor, q)
+      # result[[b+1]] <- compute_MPLE_ratio(dat.neighbor, q)
+    }
+  } else if (q == 1) {
+    opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                   z.neighbor = dat.original.neighbor, beta_zero = TRUE,
+                   method = "L-BFGS-B", lower = 0.0001)
+    p = exp(opt.r$par)/(1 + exp(opt.r$par))
+    tmp <- foreach(b = 1:B) %dopar% {
+      source("homework2/parallel_setup.R")
+      smp = matrix(rbinom(nrow(dat.original)*ncol(dat.original), 1, p), nrow = nrow(dat.original))
+      dat.neighbor <- FUN(smp)
+
+      compute_MPLE_ratio(dat.neighbor, q)
+      # result[[b+1]] <- compute_MPLE_ratio(dat.neighbor, q)
+    }
+  } else {
+    n <- nrow(dat.original)
+    m <- ncol(dat.original)
+    opt.r <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
+                   z.neighbor = dat.original.neighbor, alpha_zero = TRUE,
+                   method = "L-BFGS-B", lower = 0.0001)
+    beta <- opt.r$par
+    mask <- matrix(1,n,m)
+    neigh <- getNeighbors(mask, c(2,2,0,0))
+    block <- getBlocks(mask, 2)
+    k <- 2
+    tmp <- foreach(b = 1:B) %dopar% {
+      source("homework2/parallel_setup.R")
+      result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
+      z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
+      smp = z - 1
+      dat.neighbor <- FUN(smp)
+
+      compute_MPLE_ratio(dat.neighbor, q)
+      # result[[b+1]] <- compute_MPLE_ratio(dat.neighbor, q)
+    }
+  }
+  result <- c(result, tmp)
+
+  return(result)
+}

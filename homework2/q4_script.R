@@ -15,7 +15,7 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
   result[[1]] <- compute_MPLE_ratio(dat.original.neighbor, q)
 
   if(q == 0) {
-    tmp <- foreach(b=1:B, .combine = 'list') %dopar% {
+    tmp <- foreach(b=1:B) %dopar% {
       source("parallel_setup.R")
       smp = matrix(rbinom(nrow(dat.original)*ncol(dat.original), 1, 0.5), nrow = nrow(dat.original))
       dat.neighbor <- FUN(smp)
@@ -28,7 +28,7 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
                    z.neighbor = dat.original.neighbor, beta_zero = TRUE,
                    method = "L-BFGS-B", lower = 0.0001)
     p = exp(opt.r$par)/(1 + exp(opt.r$par))
-    tmp <- foreach(b = 1:B, .combine = 'list') %dopar% {
+    tmp <- foreach(b = 1:B) %dopar% {
       source("parallel_setup.R")
       smp = matrix(rbinom(nrow(dat.original)*ncol(dat.original), 1, p), nrow = nrow(dat.original))
       dat.neighbor <- FUN(smp)
@@ -47,7 +47,7 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
     neigh <- getNeighbors(mask, c(2,2,0,0))
     block <- getBlocks(mask, 2)
     k <- 2
-    tmp <- foreach(b = 1:B, .combine = 'list') %dopar% {
+    tmp <- foreach(b = 1:B) %dopar% {
       source("parallel_setup.R")
       result <- swNoData(beta = beta,k = k,neigh = neigh, block = block)
       z <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
