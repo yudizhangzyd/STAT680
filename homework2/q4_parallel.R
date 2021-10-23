@@ -1,6 +1,7 @@
 library(tidyverse)
 library(parallel)
 library(bayesImageS)
+library(cubelyr)
 lsb = load("../STAT680/local/LSB.rda")
 # lsb = load("./LSB.rda")
 
@@ -75,32 +76,6 @@ compute_neg_log_prof_llh <- function(par, z, alpha_zero = FALSE, beta_zero = FAL
   return(-sum(result))
 }
 
-# compute_neg_log_prof_llh_beta <- function(par, z) {
-#   beta <- par[1]
-#
-#   result <- sapply(1:nrow(z), function(i) {
-#     tt <- sapply(1:ncol(z), function(j) {
-#       compute_log_cond_prob(z, i, j, 0, beta)
-#     })
-#     sum(tt)
-#   })
-#
-#   return(-sum(result))
-# }
-#
-# compute_neg_log_prof_llh_alpha <- function(par, z) {
-#   alpha <- par[1]
-#
-#   result <- sapply(1:nrow(z), function(i) {
-#     tt <- sapply(1:ncol(z), function(j) {
-#       compute_log_cond_prob(z, i, j, alpha, 0)
-#     })
-#     sum(tt)
-#   })
-#
-#   return(-sum(result))
-# }
-
 count_neighbor <- function(z) {
   grid <- expand.grid(i = 1:dim(z)[1], j = 1:dim(z)[2])
 
@@ -127,35 +102,30 @@ count_neighbor <- function(z) {
 }
 
 
-count_neighbor_mc <- function(z, cores = 6) {
-  grid <- expand.grid(i = 1:dim(z)[1], j = 1:dim(z)[2])
-  # grid$xi <- NA
-  # grid$beta_coef <- NA
-  # grid$type <- NA
-  grid.list <- mclapply(1:nrow(grid), function(k) {
-    i <- grid$i[k]
-    j <- grid$j[k]
 
-    xi <- z[i,j]
-    xi_neighbor <- sapply(find_neighbor(z, i, j), function(nn) { z[nn[1], nn[2]] })
+count_neighbor_dl <- function(z, cores = 6) {
+  i.max <- dim(z)[1]
+  j.max <- dim(z)[2]
 
-    beta_coef <- sum(xi == xi_neighbor)
+  grid <- array(0, dim = c(2, 5, 3),
+                dimnames = list(xi=sprintf("%d", 0:1),
+                                beta_coef=sprintf("%d", 0:4),
+                                type=sprintf("%d", 2:4)))
 
-    type <- length(xi_neighbor)
+  for(i in 1:i.max) {
+    for(j in 1:j.max)  {
+      xi <- z[i,j]
+      xi_neighbor <- sapply(find_neighbor(z, i, j), function(nn) { z[nn[1], nn[2]] })
 
-    c(xi, beta_coef, type)
+      beta_coef <- sum(xi == xi_neighbor)
+      type <- length(xi_neighbor)
 
-  }, mc.cores = cores)
+      grid[xi+1, beta_coef+1, type-1] <- grid[xi+1, beta_coef+1, type-1] + 1
+    }
+  }
 
-  grid <- do.call(rbind, grid.list)
-  colnames(grid) <- c("xi", "beta_coef", "type")
-  grid <- as_tibble(grid)
-
-  result <- grid %>% group_by(xi, beta_coef, type) %>%
-    summarise(
-      count = n(),
-      .groups = "drop"
-    )
+  result <- grid %>% as.tbl_cube(met_name = "count") %>% as_tibble()
+  result <- result %>% filter(count != 0)
 
   return(result)
 }
@@ -203,14 +173,14 @@ compute_MPLE_ratio <- function(dat.neighbor, q) {
     null.val <- -sum(dat.neighbor$count) * log(0.5)
   } else if (q == 1) {
     opt.null <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
-                 z.neighbor = dat.neighbor, beta_zero = TRUE,
-                 method = "L-BFGS-B", lower = 0.0001)
+                      z.neighbor = dat.neighbor, beta_zero = TRUE,
+                      method = "L-BFGS-B", lower = 0.0001)
     null.par <- opt.null$par
     null.val <- opt.null$value
   } else {
     opt.null <- optim(par = c(0.5), compute_neg_log_prof_llh.neighbor,
-                 z.neighbor = dat.neighbor, alpha_zero = TRUE,
-                 method = "L-BFGS-B", lower = 0.0001)
+                      z.neighbor = dat.neighbor, alpha_zero = TRUE,
+                      method = "L-BFGS-B", lower = 0.0001)
     null.par <- opt.null$par
     null.val <- opt.null$value
   }
@@ -324,11 +294,12 @@ fun <- function(LSBs, B = 50, id, q = 0, FUN = count_neighbor) {
       par = c(par, opt$par)
       val = c(val, opt$value)
     }
-   res = rbind(res, par)
-   res2 = rbind(res2, val)
+    res = rbind(res, par)
+    res2 = rbind(res2, val)
   }
   return(list(res, res2))
 }
+
 ### When beta = 0
 system.time({
   res = fun(B = 1, id = 7, q = 1, LSBs = LSBs, FUN = count_neighbor_mc)
@@ -336,7 +307,7 @@ system.time({
 
 system.time({
   # res2 = lapply(1:3, function(layer) {
-    res2 <- fun2(B = 1, id = 5, q = 0, layer = 1, LSBs = LSBs, FUN = count_neighbor_mc)
+  res2 <- fun2(B = 1, id = 5, q = 0, layer = 1, LSBs = LSBs, FUN = count_neighbor_mc)
   # })
 })
 
@@ -399,8 +370,11 @@ rbenchmark::benchmark(
   neighbor1 = {
     dat.neighbor1 <- count_neighbor(dat)
   },
-  neighbor2 = {
+  neighbor_mc = {
     dat.neighbor2 <- count_neighbor_mc(dat, cores = 6)
+  },
+  neighbor_dl = {
+    dat.neighbor3 <- count_neighbor_dl(dat)
   },
   replications = 1,
   columns = c("test", "replications", "elapsed", "relative")
@@ -410,8 +384,8 @@ rbenchmark::benchmark(
 # smp = matrix(rbinom(nrow(dat)^2, 1, 0.5), nrow = nrow(dat))
 # opt.rs <- optim(par = c(0, 0), compute_neg_log_prof_llh, z = smp, method = "L-BFGS-B")
 
-
-n <- nrow(dat)
+nrow(dat)
+n <- 50
 beta <- 1
 
 mask <- matrix(1,n,n)
@@ -420,3 +394,4 @@ block <- getBlocks(mask, 2)
 k <- 2 #(number of classes, k=2 makes Potts’ to be an Ising model)
 system.time(result <- swNoData(beta = beta,k = k,neigh = neigh, block = block))
 z2 <- matrix(max.col(result$z)[1:nrow(neigh)], nrow=nrow(mask))
+z <- z2 - 1
