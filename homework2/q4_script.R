@@ -7,7 +7,7 @@ source("parallel_setup.R")
 
 fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6) {
 
-    
+
   # cl <- parallel::makeCluster(core)
   # doParallel::registerDoParallel(cl)
 
@@ -62,8 +62,8 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
     }
   }
   result <- c(result, tmp)
-  
-  # parallel::stopCluster(cl)  
+
+  # parallel::stopCluster(cl)
 
   return(result)
 }
@@ -71,10 +71,19 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
 cl <- parallel::makeCluster(2)
 doParallel::registerDoParallel(cl)
 
-id <- 7
-layer <- 1
-q <- 0
-B <- 2
+if (length(args) == 0) {
+  id <- 7
+  layer <- 1
+  q <- 0
+  B <- 2
+} else if (length(args) == 4) {
+  id <- args[1]
+  layer <- args[2]
+  q <- args[3]
+  B <- args[4]
+} else {
+  stop("please provide 0 or 4 arguments: id, layer, q, B")
+}
 
 system.time({
   ress <- fun3(LSBs, id = id, layer = layer, B = B, q = q, FUN = count_neighbor_dl)
