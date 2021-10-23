@@ -65,7 +65,7 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
   return(result)
 }
 
-cl <- parallel::makeCluster(2)
+cl <- parallel::makeCluster(5)
 doParallel::registerDoParallel(cl)
 
 if (length(args) == 0) {
