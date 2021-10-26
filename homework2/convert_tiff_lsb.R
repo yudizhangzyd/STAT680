@@ -5,7 +5,7 @@ tiff.name <- list.files("tiffs", full.names = TRUE)
 
 img.list <- lapply(tiff.name, function(tt) {
   xx <- readTIFF(source = tt)
-  (xx * 255) %% 2
+  list(lsb=(xx * 255) %% 2)
 })
 
 img.list -> LSBs_small
