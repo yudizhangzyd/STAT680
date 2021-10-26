@@ -65,7 +65,7 @@ fun3 <- function(LSBs, id, layer, B = 50, q = 0, FUN = count_neighbor, core = 6)
   return(result)
 }
 
-cl <- parallel::makeCluster(5)
+cl <- parallel::makeCluster(13)
 doParallel::registerDoParallel(cl)
 
 lsb = load("data/LSBs_small.rda")
@@ -80,7 +80,7 @@ for(id in 1:length(LSBs_small)){
       })
 
       saveRDS(ress, paste("results_small/result", id, layer, q, B, "lsb.rds", sep='-'))
-      cat(paste("finish id=",id," layer=",layer," q=",q,sep = ""))
+      cat(paste("finish id=",id," layer=",layer," q=",q,"\n",sep = ""))
 
     }
   }
