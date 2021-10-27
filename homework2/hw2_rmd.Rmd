@@ -252,6 +252,33 @@ These results are summarized in the following plots:
     p2
     ```
 
+## Problem 4
+# Results (we couldn't get many big pistures, when we run this some of the tests cannot get results)
+## big picture:
+##### test result  a = 0, b = 0  a = 0     b = 0
+##### picture 1     reject       reject   accept
+##### picture 2     reject       reject
+##### picture 4     accept       accept
+##### picture 7     reject       reject     
+##### picture 8     reject       reject
+
+## small picture:
+##### test result  a = 0, b = 0  a = 0     b = 0
+#####1              "reject"    "reject"  "reject"
+#####2              "reject"    "reject"  "reject"
+#####3              "accept"    "reject"  "accept"
+#####4              "reject"    "reject"  "accept"
+#####5              "accept"    "accept"  "accept"
+#####6              "accept"    "reject"  "reject"
+#####7              "reject"    "reject"  "reject"
+#####8              "reject"    "reject"  "reject"
+#####9              "reject"    "reject"  "reject"
+#####10             "reject"    "reject"  "reject"
+#####11             "accept"    "reject"  "reject"
+#####12             "accept"    "reject"  "reject"
+#####13             "reject"    "reject"  "reject"
+#####14             "reject"    "reject"  "reject"
+#####15             "reject"    "reject"  "accept"
 
 ## Appendix
 
@@ -559,32 +586,6 @@ p2 <- grid.r3 %>% filter(beta < 1.5) %>%
 
 
 #p4
-# Results (we couldn't get many big pistures, when we run this some of the tests cannot get results)
-## big picture:
-##### test result  a = 0, b = 0  a = 0     b = 0
-##### picture 1     reject       reject   accept
-##### picture 2     reject       reject
-##### picture 4     accept       accept
-##### picture 7     reject       reject     
-##### picture 8     reject       reject
-
-## small picture:
-##### test result  a = 0, b = 0  a = 0     b = 0
-#####1              "reject"    "reject"  "reject"
-#####2              "reject"    "reject"  "reject"
-#####3              "accept"    "reject"  "accept"
-#####4              "reject"    "reject"  "accept"
-#####5              "accept"    "accept"  "accept"
-#####6              "accept"    "reject"  "reject"
-#####7              "reject"    "reject"  "reject"
-#####8              "reject"    "reject"  "reject"
-#####9              "reject"    "reject"  "reject"
-#####10             "reject"    "reject"  "reject"
-#####11             "accept"    "reject"  "reject"
-#####12             "accept"    "reject"  "reject"
-#####13             "reject"    "reject"  "reject"
-#####14             "reject"    "reject"  "reject"
-#####15             "reject"    "reject"  "accept"
 
 count_neighbor_mc <- function(z, cores = 6) {
   grid <- expand.grid(i = 1:dim(z)[1], j = 1:dim(z)[2])
