@@ -1,0 +1,145 @@
+---
+title: "hw3"
+author: "Wangqian Ju, Yudi Zhang"
+date: "10/28/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(mvtnorm)
+library(Matrix)
+set.seed(0)
+```
+
+## q2
+```{r}
+Vj <- function(tau, sigma, z, nj)
+    (sigma^2) * diag(nj) + (tau^2) * z %*% t(z)
+
+Aj <- function(tau, sigma, beta, x, y, z, q, nj, Vj)
+  sum(diag(t(z) %*% z %*% ((tau^2)*diag(q) - (tau^4)*t(z) %*% solve(Vj(tau, sigma, z, nj))%*%z))) + (tau^4)*t(y-x %*% beta) %*% solve(Vj(tau, sigma, z, nj)) %*% z %*%
+  t(z) %*% z %*% t(z) %*% solve(Vj(tau, sigma, z, nj)) %*% (y-x %*% beta)
+
+Cj <- function(tau, sigma, beta, x, y, z, q, nj, Vj)
+  (tau^4)*t(y-x %*% beta) %*% solve(Vj(tau, sigma, z, nj)) %*%
+  z %*% t(z) %*% solve(Vj(tau, sigma, z, nj)) %*% (y-x %*% beta) + 
+  sum(diag((tau^2)*diag(q)-(tau^4)*t(z) %*% solve(Vj(tau, sigma, z, nj)) %*% z)) 
+
+Dj <- function(tau, sigma, beta, x, y, z, nj, Vj)
+  (tau^2)*z %*% t(z) %*% solve(Vj(tau, sigma, z, nj)) %*% (y-x %*% beta)
+
+
+em <- function(beta0, tau0, sigma0, X, Y, Z, n, p, q, tol = 1e-5){
+  beta_new=beta0
+  tau_new=tau0
+  sigma_new=sigma0
+  N = cumsum(n)
+  m <- length(n)
+  
+  z = list()
+  y = list()
+  x = list()
+  for (j in 1:m) {
+    zs=matrix(nrow = n[j],ncol = q)
+    xs=matrix(nrow = n[j],ncol = p)
+    ys = matrix(nrow = n[j],ncol = 1)
+    if(j==1) {
+      for (i in 1:n[1])
+        for (k in 1:q) 
+          zs[i,k]=Z[i,k]
+      for (i in 1:n[1]) 
+        for (k in 1:p) 
+          xs[i,k]=X[i,k]
+      for (i in 1:n[1])
+          ys[i,1]=Y[i,1]
+    }
+    if(j>1) {
+      for (i in 1:n[j])
+        for (k in 1:q)
+          zs[i,k]=Z[(N[j-1]+i),(q*(j-1))+k]
+      for (i in 1:n[j])
+        for (k in 1:p) 
+          xs[i,k]=X[(N[j-1]+i),k]
+      for (i in 1:n[j])
+          ys[i,1]=Y[(N[j-1]+i),1]
+    }
+    x[[j]] = xs
+    z[[j]] = zs
+    y[[j]] = ys
+  }
+
+  ######E-Step
+  A=matrix(nrow = m,ncol = 1)
+  C=matrix(nrow = m,ncol = 1)
+  for (j in 1:m) {
+    A[j] = Aj(tau_new, sigma_new[j], beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
+    C[j] = Cj(tau_new, sigma_new[j], beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
+  }
+  siginv = diag(rep((1/sigma_new)^2,n))
+  tmp = c()
+  for (j in 1:m)
+    tmp=c(tmp, Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj))
+  
+  ######M-Step
+  beta_hat=solve(t(X)%*%siginv%*%X)%*%t(X)%*%siginv%*%(Y-tmp)
+  tau_hat=sqrt(sum(C)/(m*q))
+  sigma_hat=sigma_new
+  for (j in 1:m)
+    sigma_hat[j] = sqrt((A[j]-2*t(y[[j]]-(x[[j]]%*%beta_new)) %*% 
+                           Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj)+t(y[[j]]-(x[[j]]%*%beta_new)) %*% (y[[j]]-(x[[j]]%*%beta_new)))/n[j])
+  
+  while((abs(tau_new-tau_hat) >= tol) || (abs(sigma_new-sigma_hat) >= tol) || (abs(beta_new-beta_hat) >= tol)) {
+    beta_new <- beta_hat
+    sigma_new <- sigma_hat
+    tau_new <- tau_hat
+    ######E-Step
+    for (j in 1:m) {
+      A[j]<-Aj(tau_new, sigma_new[j], beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
+      C[j]<-Cj(tau_new, sigma_new[j], beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
+    }
+    tmp = c()
+    for (j in 1:m)
+        tmp=c(tmp, Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj))
+    
+    siginv=diag(rep((1/sigma_new)^2,n))
+    ######M-Step
+    beta_hat <- solve(t(X)%*%siginv%*%X)%*%t(X)%*%siginv%*%(Y-tmp)
+    for (j in 1:m)
+      sigma_hat[j] = sqrt((A[j]-2*t(y[[j]]-(x[[j]]%*%beta_new))
+      %*% Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj) +t(y[[j]]-(x[[j]]%*%beta_new)) %*% (y[[j]]-(x[[j]]%*%beta_new)))/n[j])
+    tau_hat=sqrt(sum(C)/(m*q))
+  }
+  
+  par <- list(bate = beta_hat, tau = tau_hat, sigma = sigma_hat)
+  return(par)
+}
+```
+
+```{r}
+n <- c(10, 10, 10)
+p <- 2
+q <- 2
+m <- length(n)
+
+X <- matrix(runif(sum(n) * p), nrow = sum(n), ncol = p, byrow = T)
+Z <- bdiag(matrix(rnorm(n[1] * q), nrow = n[1], ncol = q, byrow = T),
+          matrix(rnorm(n[2] * q), nrow = n[2] , ncol = q, byrow = T),
+          matrix(rnorm(n[3] * q), nrow = n[3], ncol = q, byrow = T))
+Z <- as.matrix(Z)
+beta <- matrix(rnorm(p), nrow = p, ncol = 1, byrow = T)
+sigma <- rnorm(m)
+tau <- rnorm(1)
+b <- matrix(rnorm(m * q, 0, tau^2), nrow = m * q, ncol = 1, byrow = T)
+e <- matrix(c(rmvnorm(1, rep(0, n[1]), (sigma[1])^2*diag(n[1])),
+            rmvnorm(1, rep(0, n[2]), (sigma[2])^2*diag(n[2])),
+            rmvnorm(1, rep(0, n[3]), (sigma[3])^2*diag(n[3]))),
+            nrow = sum(n), ncol = 1, byrow = T)
+Y <- X %*% beta + Z %*% b + e
+beta0 <- matrix(c(1, 1),nrow = p,ncol = 1,byrow = T)
+tau0 <- 1
+sigma0 <- c(1, 1, 1)
+em(beta0, tau0, sigma0, X, Y, Z, n, q = q, p = p)
+```
+
