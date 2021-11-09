@@ -11,6 +11,7 @@ library(MASS)
 library(mvtnorm)
 library(Matrix)
 set.seed(0)
+library(plot3D)
 ```
 
 ## q2
@@ -143,3 +144,17 @@ sigma0 <- c(1, 1, 1)
 em(beta0, tau0, sigma0, X, Y, Z, n, q = q, p = p)
 ```
 
+## q3
+
+#####3
+```{r}
+d = oro.nifti::readNIfTI(fname = "new_phantom.nii.gz") 
+data = d@.Data
+data = drop(data)
+r1 = data[1:6,1:6 , ]
+image2D(r1)
+r2 = data[80:91, 80:91, ]
+image2D(r2)
+r3 = data[100:167, 100:167, ]
+image2D(r3)
+```
