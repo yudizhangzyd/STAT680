@@ -11,7 +11,7 @@ logf <- function(x, r, rho, sigma1, sigma2, tau) {
 
 # par c(sigma1, sigma2, rho, tau)
 Qfunc.each <- function(par, par.cur, r, sample.size = 10000, FUNC = logf){
-  theta.cond <- arms(sample.size, FUNC, -pi, pi, metropolis = TRUE,
+  theta.cond <- armspp::arms(sample.size, FUNC, -pi, pi, metropolis = TRUE,
                      arguments = list(
                        r=r, sigma1=par.cur[1], sigma2=par.cur[2], rho=par.cur[3], tau=par.cur[4]
                      ))
@@ -75,7 +75,7 @@ em_q3 <- function(r, iter.max=40, tol=1e-4, sample.size=1000){
 }
 
 
-cl <- parallel::makeCluster(6)
+cl <- parallel::makeCluster(9)
 doParallel::registerDoParallel(cl)
 
 args = commandArgs(trailingOnly=TRUE)
@@ -83,12 +83,14 @@ args = commandArgs(trailingOnly=TRUE)
 start.idx <- as.numeric(args[1])
 end.idx <- as.numeric(args[2])
 
-result <- foreach(b=start.idx:end.idx) %doPar% {
+print("hello1")
+
+result <- foreach(b=start.idx:end.idx) %dopar% {
 
   for(i in 1:3) {
     rr <- c(selected.region[[i]][,,b])
 
-    cat("compute region", i, "for image", b, "\n")
+    print(paste("compute region", i, "for image", b, "\n"))
     result <- em_q3(rr, tol = 1e-8, sample.size = 100)
 
     saveRDS(result, paste("results_q3/result", i, b, "est.rds", sep="-" ))
@@ -96,5 +98,5 @@ result <- foreach(b=start.idx:end.idx) %doPar% {
 
 }
 
-
+parallel::stopCluster(cl)
 
