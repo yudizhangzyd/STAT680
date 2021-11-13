@@ -218,13 +218,32 @@ result.container <- result.container %>% mutate(
   variance = purrr::map(variance.matrix, diag)
 )
 
-result.container <- result.container %>% unnest(c(estimates, variance))
-result.container$parameter <- rep(c("sigma1", "sigma2", "rho", "tau"), 18 * 3)
+result.container %>% mutate(
+  tau.value = purrr::map_dbl(estimates, function(est) est[4]),
+  sigma.ratio = purrr::map_dbl(estimates, function(est) est[1] / est[2])
+) %>% pivot_longer(cols = c(tau.value, sigma.ratio), names_to = "type", values_to = "value") %>%
+  ggplot() +
+  geom_line(aes(x=image, y=value, color=factor(region))) +
+  facet_wrap(~type, scales = "free")
 
-result.container <- result.container %>% mutate(
+
+result.container.all <- result.container %>% unnest(c(estimates, variance))
+result.container.all$parameter <- rep(c("sigma1", "sigma2", "rho", "tau"), 18 * 3)
+
+result.container.all <- result.container.all %>% mutate(
   lower = estimates - qnorm(.975) * sqrt(variance),
   upper = estimates + qnorm(.975) * sqrt(variance)
 )
+
+result.container %>% mutate(
+  var.sig1_sig2 = purrr::map_dbl(variance.matrix, function(vv) {
+    t(c(1,-1,0,0)) %*% vv %*% c(1,-1,0,0)
+  }),
+  sig1_sig2 = purrr::map_dbl(estimates, function(est) est[1] - est[2]),
+  lower = sig1_sig2 - qnorm(.975) * sqrt(var.sig1_sig2),
+  upper = sig1_sig2 + qnorm(.975) * sqrt(var.sig1_sig2)
+)
+
 
 save(result.container, ests, ests.var, file="homework3/q3_all_results.rda")
 

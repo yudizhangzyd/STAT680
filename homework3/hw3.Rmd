@@ -12,6 +12,7 @@ library(mvtnorm)
 library(Matrix)
 set.seed(0)
 library(plot3D)
+library(tidyverse)
 ```
 
 ## q2
@@ -20,7 +21,9 @@ Vj <- function(tau, sigma, z, nj)
     (sigma^2) * diag(nj) + (tau^2) * z %*% t(z)
 
 Aj <- function(tau, sigma, beta, x, y, z, q, nj, Vj)
-  sum(diag(t(z) %*% z %*% ((tau^2)*diag(q) - (tau^4)*t(z) %*% solve(Vj(tau, sigma, z, nj))%*%z))) + (tau^4)*t(y-x %*% beta) %*% solve(Vj(tau, sigma, z, nj)) %*% z %*%
+  sum(diag(t(z) %*% z %*% ((tau^2)*diag(q) - (tau^4)*t(z) %*% 
+                             solve(Vj(tau, sigma, z, nj))%*%z))) + 
+  (tau^4)*t(y-x %*% beta) %*% solve(Vj(tau, sigma, z, nj)) %*% z %*%
   t(z) %*% z %*% t(z) %*% solve(Vj(tau, sigma, z, nj)) %*% (y-x %*% beta)
 
 Cj <- function(tau, sigma, beta, x, y, z, q, nj, Vj)
@@ -88,28 +91,35 @@ em <- function(beta0, tau0, sigma0, X, Y, Z, n, p, q, tol = 1e-5){
   tau_hat=sqrt(sum(C)/(m*q))
   sigma_hat=sigma_new
   for (j in 1:m)
-    sigma_hat[j] = sqrt((A[j]-2*t(y[[j]]-(x[[j]]%*%beta_new)) %*% 
-                           Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj)+t(y[[j]]-(x[[j]]%*%beta_new)) %*% (y[[j]]-(x[[j]]%*%beta_new)))/n[j])
+    sigma_hat[j] = 
+    sqrt((A[j]-2*t(y[[j]]-(x[[j]]%*%beta_new)) %*% 
+            Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj)+
+            t(y[[j]]-(x[[j]]%*%beta_new)) %*% (y[[j]]-(x[[j]]%*%beta_new)))/n[j])
   
-  while((abs(tau_new-tau_hat) >= tol) || (abs(sigma_new-sigma_hat) >= tol) || (abs(beta_new-beta_hat) >= tol)) {
+  while((abs(tau_new-tau_hat) >= tol) || 
+        (abs(sigma_new-sigma_hat) >= tol) || (abs(beta_new-beta_hat) >= tol)) {
     beta_new <- beta_hat
     sigma_new <- sigma_hat
     tau_new <- tau_hat
     ######E-Step
     for (j in 1:m) {
-      A[j]<-Aj(tau_new, sigma_new[j], beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
-      C[j]<-Cj(tau_new, sigma_new[j], beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
+      A[j]<-Aj(tau_new, sigma_new[j], 
+               beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
+      C[j]<-Cj(tau_new, sigma_new[j], 
+               beta_new, x[[j]], y[[j]], z[[j]], q, n[j], Vj)
     }
     tmp = c()
     for (j in 1:m)
-        tmp=c(tmp, Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj))
+        tmp=c(tmp, Dj(tau_new,sigma_new[j],
+                      beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj))
     
     siginv=diag(rep((1/sigma_new)^2,n))
     ######M-Step
     beta_hat <- solve(t(X)%*%siginv%*%X)%*%t(X)%*%siginv%*%(Y-tmp)
     for (j in 1:m)
       sigma_hat[j] = sqrt((A[j]-2*t(y[[j]]-(x[[j]]%*%beta_new))
-      %*% Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj) +t(y[[j]]-(x[[j]]%*%beta_new)) %*% (y[[j]]-(x[[j]]%*%beta_new)))/n[j])
+      %*% Dj(tau_new,sigma_new[j],beta_new,x[[j]],y[[j]],z[[j]], n[j], Vj) +
+        t(y[[j]]-(x[[j]]%*%beta_new)) %*% (y[[j]]-(x[[j]]%*%beta_new)))/n[j])
     tau_hat=sqrt(sum(C)/(m*q))
   }
   
@@ -146,15 +156,225 @@ em(beta0, tau0, sigma0, X, Y, Z, n, q = q, p = p)
 
 ## q3
 
-#####3
+#### 3
+
+The three selected regions are: 
+
 ```{r}
 d = oro.nifti::readNIfTI(fname = "new_phantom.nii.gz") 
 data = d@.Data
 data = drop(data)
-r1 = data[1:6,1:6 , ]
-image2D(r1)
-r2 = data[80:91, 80:91, ]
-image2D(r2)
+r1 = data[40:53,95:114 , ]
+r2 = data[81:90, 81:90, ]
 r3 = data[100:167, 100:167, ]
-image2D(r3)
 ```
+
+```{r, echo=FALSE}
+image(1:256, 1:256, data[,,1])
+rect(40, 95, 53, 114)
+rect(81, 81, 90, 90)
+rect(100, 100, 167, 167)
+text(46, 103, "r1")
+text(85.5, 85.5, "r2")
+text(130, 130, "r3")
+```
+
+The functions for the EM algorithm and all other functions used for q3:
+
+```{r}
+logf <- function(x, r, rho, sigma1, sigma2, tau) {
+  -1/(2*(1-rho^2)) * (r - tau)^2 *
+    (cos(x)^2/sigma1^2 - 
+       (2*rho*cos(x)*sin(x))/(sigma1*sigma2) + 
+       sin(x)^2/sigma2^2)
+}
+
+Qfunc.each <- function(par, par.cur, r, sample.size = 10000, FUNC = logf){
+  theta.cond <- arms(sample.size, FUNC, -pi, pi, metropolis = TRUE,
+                      arguments = list(
+                        r=r, sigma1=par.cur[1], sigma2=par.cur[2], 
+                        rho=par.cur[3], tau=par.cur[4]
+                      ))
+  sigma1 <- par[1]
+  sigma2 <- par[2]
+  rho <- par[3]
+  tau <- par[4]
+
+  intt <-
+    cos(theta.cond)^2/sigma1^2 -
+    (2*rho*sin(theta.cond)*cos(theta.cond))/(sigma1*sigma2) +
+    sin(theta.cond)^2/sigma2^2
+  intt <- mean(intt)
+
+  result <-
+    -log(sigma1) - log(sigma2) - 0.5*log(1-rho^2) + log(r) -
+    1/(2*(1-rho^2)) * (r-tau)^2 * intt
+
+  result
+}
+
+Qfunc <- function(par, par.cur, r.vec, sample.size=1000) {
+  result <- sapply(r.vec, function(r) {
+    Qfunc.each(par, par.cur, r, sample.size)
+  })
+
+  return(-sum(result))
+}
+
+em_q3 <- function(r, iter.max=40, tol=1e-4, sample.size=1000){
+  par.cur <- c(sd(r), sd(r), 0.5, mean(r))
+
+  iter <- 0
+  while(TRUE){
+    iter <- iter + 1
+
+    par.old <- par.cur
+    # obtain the estimates
+    opt <- optim(par.cur, Qfunc, par.cur=par.cur, 
+                 r.vec=r, sample.size=sample.size,
+                 method = "L-BFGS-B", lower = c(0.0001,0.0001,-0.99,0.0001),
+                 upper=c(1000, 1000, 0.99, 5000))
+
+    # update the current value
+    par.cur <- opt$par
+
+    l2.diff <- sum((par.cur-par.old)^2)
+
+    cat(paste("iter:", iter, "l2.diff:", l2.diff, "Q value:", opt$value, "\n"))
+
+    if(l2.diff < tol){
+      cat("less than the tolerance. exit\n")
+      break
+    } else if (iter > iter.max) {
+      cat("reach max iteration. exit\n")
+      break
+    }
+  }
+
+  return(par.cur)
+
+}
+
+variance.est.each <- function(par, r, sample.size = 1000, FUNC = logf){
+  sigma1 <- par[1]
+  sigma2 <- par[2]
+  rho <- par[3]
+  tau <- par[4]
+
+  theta.cond <- arms(sample.size, FUNC, -pi, pi, metropolis = TRUE,
+                     arguments = list(
+                       r=r, sigma1=sigma1, sigma2=sigma2, rho=rho, tau=tau
+                     ))
+
+  part.sigma1 <- 
+    mean(-2*cos(theta.cond)^2/sigma1^3 + 
+           (2*rho*sin(theta.cond)*cos(theta.cond))/(sigma1^2*sigma2))
+  part.sigma2 <- 
+    mean(-2*sin(theta.cond)^2/sigma2^3 + 
+           (2*rho*sin(theta.cond)*cos(theta.cond))/(sigma1*sigma2^2))
+  part.rho1 <- 
+    mean(cos(theta.cond)^2/sigma1^2 - 
+           (2*rho*cos(theta.cond)*sin(theta.cond))/(sigma1*sigma2) +
+    sin(theta.cond)^2/sigma2^2)
+  part.rho2 <- mean(-2*sin(theta.cond)*cos(theta.cond)/(sigma1*sigma2))
+  part.tau <- part.rho1
+
+  dev.sigma1 <- -1/sigma1 - 1/(2*(1-rho^2))*(r-tau)^2*part.sigma1
+  dev.sigma2 <- -1/sigma2 - 1/(2*(1-rho^2))*(r-tau)^2*part.sigma2
+  dev.rho <- 
+    rho/(1-rho^2) + 
+    (r-tau)^2 * (-rho/(1-rho^2)^2 * part.rho1 - 1/(2*(1-rho^2)) * part.rho2)
+  dev.tau <- (r-tau)/(1-rho^2) * part.tau
+
+  q <- c(dev.sigma1, dev.sigma2, dev.rho, dev.tau)
+
+  I.matrix <- q %*% t(q)
+
+  return(I.matrix)
+}
+
+variance.est <- function(par, r.vec, sample.size = 1000, return_inv = TRUE){
+  result <- lapply(r.vec, function(r) {
+    variance.est.each(par, r, sample.size)
+  })
+
+  result <- Reduce("+", result)
+
+  if(return_inv) {
+    return(solve(result))
+  } else {
+    return(result)
+  }
+
+}
+```
+
+Let $\tau = || \mu ||$, the estimates and variance estimates of $\sigma_1$, $\sigma_2$, $\rho$, and $\tau$ is showing in the following table
+
+```{r, echo=FALSE}
+load("q3_all_results.rda")
+result.container <- expand.grid(region=1:3, image=1:18) %>% as_tibble()
+
+result.container <- result.container %>% mutate(
+  estimates = purrr::map2(region, image, function(j, i) {
+    ests[[i]][[j]]
+  }),
+  variance.matrix = purrr::map2(region, image, function(j, i) {
+    ests.var[[i]][[j]]
+  }),
+  variance = purrr::map(variance.matrix, diag)
+)
+
+p1 <- result.container %>% mutate(
+  tau.value = purrr::map_dbl(estimates, function(est) est[4]),
+  sigma.ratio = purrr::map_dbl(estimates, function(est) est[1] / est[2])
+) %>% pivot_longer(cols = c(tau.value, sigma.ratio), names_to = "type", values_to = "value") %>%
+  ggplot() +
+  geom_line(aes(x=image, y=value, color=factor(region))) +
+  facet_wrap(~type, scales = "free")
+
+
+result.container.all <- result.container %>% unnest(c(estimates, variance))
+result.container.all$parameter <- rep(c("sigma1", "sigma2", "rho", "tau"), 18 * 3)
+
+result.container.all <- result.container.all %>% mutate(
+  lower = estimates - qnorm(.975) * sqrt(variance),
+  upper = estimates + qnorm(.975) * sqrt(variance)
+)
+
+r2 <- result.container %>% mutate(
+  var.sig1_sig2 = purrr::map_dbl(variance.matrix, function(vv) {
+    t(c(1,-1,0,0)) %*% vv %*% c(1,-1,0,0)
+  }),
+  sig1_sig2 = purrr::map_dbl(estimates, function(est) est[1] - est[2]),
+  lower = sig1_sig2 - qnorm(.975) * sqrt(var.sig1_sig2),
+  upper = sig1_sig2 + qnorm(.975) * sqrt(var.sig1_sig2)
+)
+
+```
+
+```{r, echo=FALSE}
+r1 <- result.container.all %>% dplyr::select(image, region, parameter, estimates, variance, lower , upper)
+
+knitr::kable(r1, digits=4)
+```
+
+We also plotted $\sigma_1 / \sigma_2$ and $\tau$ for all three regions over the 18 images. It seems that there is some pattern for the normed mean intensity
+
+```{r, echo=FALSE}
+p1 + 
+  theme_bw()
+```
+
+The variance estimates of $\rho$ have been shown in the previous table, and the variance estimates of $\hat{\sigma}_1- \hat{\sigma}_2$ are:
+
+```{r, echo=FALSE}
+knitr::kable(r2 %>% dplyr::select(image, region, sig1_sig2, var.sig1_sig2, lower, upper),
+             digits = 4)
+```
+
+It seems that the corresponding confidence intervals for $\rho$ do not include 0, but those for $\hat{\sigma}_1- \hat{\sigma}_2$ include 0.
+
+
+
+
