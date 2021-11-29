@@ -1,22 +1,3 @@
-library(osDesign)
-k <- c(4,3,2,4)
-x <- c(1,0,1,4)
-n <- sum(x)
-all <- sum(k)
-mcp <- function(B){
-  pval <- prod(choose(k,x))/choose(all,n)
-  iter <- 0
-  while (iter < B) {
-    iter <- iter + 1
-    x <- rmvhyper(k,n)
-    u <- prod(choose(k,x))/choose(all,n)
-    pval <- c(pval,u)
-  }
-  ranks <- rank(pval, ties.method = "random")
-  1 - (B + 2 - ranks[1])/(B + 1)
-}
-mcp(999)
-
 # question 2
 
 x_neighbor <- function(i, j, dim.z, type = "h") {
@@ -133,13 +114,6 @@ gibbs.sampler.ising <- function(z, par, sample.size = 100) {
   return(result)
 }
 
-z <- matrix(rbinom(16*16, 1, 0.5), ncol = 16)
-par <- c(0.25, 0.5, 0.5)
-
-z <- matrix(1, nrow = 16, ncol=16)
-z <- sampler.step(z, par)
-z.list <- gibbs.sampler.ising(z, par, 10)
-
 #### (b) perfect simulation
 find.perfect.m <- function(m, par, dim.z, seed = 17381128) {
   nr <- dim.z[1]
@@ -174,30 +148,12 @@ find.perfect.sample <- function(dim.z, par, seed = 17381128){
   return(result)
 }
 
-result <- find.perfect.sample(c(16, 16), par)
-result$m
-
-m
-set.seed(17381128)
-t1 <- gibbs.sampler.ising(ones, par, sample.size = m)[[m]]
-set.seed(17381128)
-t2 <- gibbs.sampler.ising(zeros, par, sample.size = m)[[m]]
-
-all(t1 == t2)
-all(t1 == result$x.zero)
-
-# result$x.zero is the perfect sample
-
-set.seed(17381128)
-t3 <- gibbs.sampler.ising(zeros, par, sample.size = m+1)
-all(t3[[m]] == t1)
-
 ### (c)
 dim.z <- c(512, 512)
 par <- c(0, 1, 1)
 
 result.c <- find.perfect.sample(dim.z, par, seed = 18271128)
-saveRDS(result.c, file = "homework4/c_perfect_sample_512.rds")
+saveRDS(result.c, file = "h4_q2c_result/c_perfect_sample_512.rds")
 
 
 
