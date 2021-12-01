@@ -137,10 +137,10 @@ find.perfect.m <- function(m, par, dim.z, n.core, seed = 17381128) {
 }
 
 
-find.perfect.sample <- function(dim.z, par, n.core, seed = 17381128, m.start = 0){
+find.perfect.sample <- function(dim.z, par, n.core, seed = 17381128, m.start = 0, m.by = 1){
   m <- m.start
   while(TRUE) {
-    m <- m + 1
+    m <- m + m.by
     result <- find.perfect.m(m, par, dim.z, n.core, seed = seed)
     if(!is.null(result)) {
       break
