@@ -2,6 +2,8 @@ library(osDesign)
 library(parallel)
 library(doParallel)
 
+# question 1 
+
 k <- c(4,3,2,4)
 x <- c(1,0,1,4)
 n <- sum(x)
@@ -41,12 +43,20 @@ result.thinned <- result[seq(1,100, by = 5)]
 ### (c)
 
 ### (d)
-example.16 <- perfect.gibbs.multi.grid.sampler(c(16, 16), c(0.25, 0.5, 0.5), n.core = 4, m.by = 10)
+d <- perfect.gibbs.multi.grid.sampler(c(128, 128), c(0.25, 0.5, 0.5), n.core = 4, m.by = 10)
 
 source("IsingMPLE.R")
-mple.RES <- get.MPLE(example.16[[100]], homogenous = FALSE)
-mple.RES
 
+result.thinned <- d[seq(1,5000, by = 5)]
+est = c()
+for (i in 1:length(result.thinned)) {
+  res = get.MPLE(result.thinned[[i]], homogenous = FALSE)
+  est = rbind(est, res$MPLES)
+}
+colMeans(est)
+# 0.2507922 0.5004476 0.4988359
+apply(est, 2, sd)
+# 0.01816574 0.01906375 0.01936097
 
 
 # source("funcs.R")
