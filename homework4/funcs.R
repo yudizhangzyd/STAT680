@@ -32,6 +32,8 @@ x_neighbor <- function(i, j, dim.z, type = "h") {
 
 }
 
+
+
 x_prob <- function(i, j, z, par) {
   alpha <- par[1]
   beta.h <- par[2]
@@ -65,6 +67,22 @@ x_prob <- function(i, j, z, par) {
 
 x_prob_vec <- Vectorize(x_prob, vectorize.args = c("i", "j"))
 rbinom.vec <- Vectorize(rbinom, vectorize.args = "prob")
+
+x_prob_parallel <- function(i, j, z, par, n.core) {
+
+  i.split <- split(i,
+                   ceiling(seq_along(i) / ceiling(length(i) / n.core) ))
+  j.split <- split(j,
+                   ceiling(seq_along(i) / ceiling(length(i) / n.core) ))
+
+  result <- foreach(b = 1:n.core, .combine = 'c') %dopar% {
+    source("funcs.R")
+    x_prob_vec(i.split[[b]], j.split[[b]], z, par)
+  }
+
+  return(result)
+
+}
 
 sampler.step <- function(z, par, n.core) {
   dim.z <- dim(z)
@@ -137,7 +155,8 @@ find.perfect.m <- function(m, par, dim.z, n.core, seed = 17381128) {
 }
 
 
-find.perfect.sample <- function(dim.z, par, n.core, seed = 17381128, m.start = 0, m.by = 1){
+find.perfect.sample <- function(dim.z, par, n.core, seed = 17381128,
+                                m.start = 0, m.by = 1, sample.size = 100){
   m <- m.start
   while(TRUE) {
     m <- m + m.by
@@ -146,5 +165,157 @@ find.perfect.sample <- function(dim.z, par, n.core, seed = 17381128, m.start = 0
       break
     }
   }
+
+  print(paste0("the perfect sample is found with m = ", m, "."))
+
+  mc.result <- gibbs.sampler.ising(result$x.zero, par, n.core, sample.size)
+
+  return(mc.result)
+}
+
+fine_to_coarse <- function(z, by=4) {
+  dim.z <- dim(z)
+
+  z.row.idx <- split(1:dim.z[1],
+                     ceiling(1:dim.z[1] / by ))
+  z.col.idx <- split(1:dim.z[2],
+                     ceiling(1:dim.z[2] / by ))
+
+  rr <- lapply(z.col.idx, function(col.idx) {
+    lapply(z.row.idx, function(row.idx) {
+      z[row.idx, col.idx]
+    })
+  })
+
+  rr.coarse <- sapply(rr, function(rr.cols) {
+    sapply(rr.cols, function(rr.square) {
+      num.one <- sum(rr.square == 1)
+      threshold <- by * by / 2
+      if( num.one >threshold) {
+        return(1)
+      } else if( num.one < threshold) {
+        return(0)
+      } else {
+        return(rbinom(1, 1, 0.5))
+      }
+    })
+  })
+
+  return(rr.coarse)
+
+}
+
+coarse_to_fine <- function(z, by=4) {
+  dim.z <- dim(z)
+
+  nr <- dim.z[1]
+  nc <- dim.z[2]
+
+  result <- lapply(1:nc, function(col) {
+    tt <- lapply(1:nr, function(row) {
+      get_square(z[row, col], by, by)
+    })
+    do.call(rbind, tt)
+  })
+
+  result <- do.call(cbind, result)
+  return(result)
+
+}
+
+get_square <- function(value, nr, nc){
+  total <- nr*nc
+  num.pool <- (total/2):(total)
+  num.result <- sample(num.pool, size = 1)
+
+  perm <- sample(1:total, size = total, replace = FALSE)
+
+  result <- rep(NA, total)
+  result[perm[1:num.result]] <- value
+  result[perm[(num.result+1):total]] <- 1-value
+
+  return(matrix(result, nrow=nr, ncol=nc))
+
+}
+
+
+compute_loglikelihood <- function(z, par){
+  beta.h <- par[2]
+  beta.v <- par[3]
+
+  coef.alpha <- sum(z)
+
+  coef.beta.h <- sum(apply(z, 1, function(row) {
+    tt <- diff(row)
+    sum(tt == 0)
+  }))
+
+  coef.beta.v <- sum(apply(z, 2, function(col) {
+    tt <- diff(col)
+    sum(tt == 0)
+  }))
+
+  result <- par[1] * coef.alpha + beta.h * coef.beta.h + beta.v * coef.beta.v
+  return(result)
+
+
+}
+
+multi_grid_cycle <- function(z, par, n.core) {
+  z.small <- fine_to_coarse(z)
+  par.small <- c(par[1], par[2:3]/4)
+
+  next.z <- sampler.step(z, par, n.core)
+  next.z.small <- sampler.step(z.small, par.small, n.core)
+
+  mc.llh <-
+    compute_loglikelihood(next.z, par) +
+    compute_loglikelihood(next.z.small, par.small)
+
+  # propose swap
+  propose.z <- coarse_to_fine(next.z.small)
+  propose.z.small <- fine_to_coarse(next.z)
+
+  prop.llh <-
+    compute_loglikelihood(propose.z, par) +
+    compute_loglikelihood(propose.z.small, par.small)
+
+  if(prop.llh > mc.llh) {
+    return(propose.z)
+  } else {
+    return(next.z)
+  }
+
+}
+
+multi_grid_method <- function(z, par, n.core, sample.size = 100) {
+  result <- list()
+  for(i in 1:sample.size) {
+    result[[i]] <- multi_grid_cycle(z, par, n.core)
+    z <- result[[i]]
+  }
   return(result)
 }
+
+perfect.gibbs.multi.grid.sampler <- function(dim.z, par, n.core, seed = 17381128,
+                                             m.start = 0, m.by = 1, sample.size = 100) {
+  m <- m.start
+  while(TRUE) {
+    m <- m + m.by
+    result <- find.perfect.m(m, par, dim.z, n.core, seed = seed)
+    if(!is.null(result)) {
+      break
+    }
+  }
+
+  print(paste0("the perfect sample is found with m = ", m, "."))
+
+  mc.result <- multi_grid_method(result$x.zero, par, n.core, sample.size)
+
+  return(mc.result)
+}
+
+
+
+
+
