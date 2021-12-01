@@ -23,7 +23,7 @@ cl <- parallel::makeCluster(n.core)
 doParallel::registerDoParallel(cl)
 
 result <- perfect.gibbs.multi.grid.sampler(c(dd, dd), par, n.core = n.core,
-                                           m.by = 10000, sample.size = sample.size)
+                                           m.by = m.by, sample.size = sample.size)
 
 saveRDS(result, file = paste("rds_folder/r", dd, paste(par, collapse = "-"), "r.rds", sep = "-"))
 
